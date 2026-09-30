@@ -13,6 +13,7 @@ BetterZalo is a modular, persistent modding framework for Zalo PC and Zalo Web. 
 - Panel Content Area: `#setting-right` (hide native `.stack-navigation` without destroying it; restore on native select)
 - BetterZalo Tab IDs: `#better-zalo-tab` (BetterZalo), `#better-zalo-plugins-tab` (Plugins), `#better-zalo-themes-tab` (Themes Library)
 - Sidebar labels use native type token `var(--f14, 0.875rem)` (exactly 14px, weight 400, line-height 1.5)
+- Selected sidebar item reuses the native selected class when detected; fallback geometry: 40px height, `4px 8px` margin, `0 8px` padding, 6px radius, `var(--layer-background-selected)` (no overlay, no custom blue)
 
 ## Plugin Manager Architecture
 - All plugins register through `window.BetterZalo.registerPlugin(config)`

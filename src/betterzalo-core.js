@@ -212,7 +212,14 @@
       user-select: none;
     }
     .bz-item-active {
-      background: var(--background-activeness, var(--layer-background-subtle, Highlight)) !important;
+      /* Fallback selected state: exact native geometry. When the real native
+         selected class is detected it is reused instead (see detectNativeActiveClass);
+         this rule only guarantees the confirmed look when it is not determinable. */
+      height: 40px !important;
+      margin: 4px 8px !important;
+      padding: 0 8px !important;
+      border-radius: 6px !important;
+      background-color: var(--layer-background-selected, var(--background-activeness, Highlight)) !important;
     }
     .bz-nav-label {
       font-size: var(--f14, 0.875rem) !important;
@@ -255,6 +262,7 @@
 
   let currentView = 'betterzalo';
   let observer = null;
+  let nativeActiveClass = ''; // real native selected class, when determinable
 
   // Reverse-engineered hooks: the settings modal mounts lazily, so
   // div.setting-menu and #setting-right only exist while settings are open.
@@ -276,13 +284,41 @@
     );
   }
 
+  function clearBzActive(menu) {
+    menu.querySelectorAll('.bz-item-active').forEach((el) => {
+      el.classList.remove('bz-item-active');
+      if (nativeActiveClass) el.classList.remove(nativeActiveClass);
+      el.removeAttribute('aria-selected');
+    });
+  }
+
   function clearActiveStates(menu) {
-    menu.querySelectorAll('.bz-item-active').forEach((el) => el.classList.remove('bz-item-active'));
+    clearBzActive(menu);
     // Best-effort: drop native active classes so only BetterZalo looks selected.
     menu.querySelectorAll('[class*="active"], [class*="selected"], [aria-selected="true"]').forEach((el) => {
       el.classList.remove('active', 'selected');
       el.removeAttribute('aria-selected');
     });
+  }
+
+  // Prefer the actual native selected mechanism over recreated styling:
+  // capture the marker class from the currently selected native item.
+  function detectNativeActiveClass(menu, template) {
+    const base = new Set(template ? [...template.classList] : []);
+    const flagged = menu.querySelector('[aria-selected="true"]');
+    const candidates = flagged
+      ? [flagged]
+      : [...menu.querySelectorAll('[class*="active"], [class*="selected"]')];
+    for (const cand of candidates) {
+      if (cand.closest('#' + SECTION_ID)) continue; // ignore our own items
+      for (const c of [...cand.classList]) {
+        if (!base.has(c) && /active|selected/i.test(c)) {
+          nativeActiveClass = c;
+          log('reusing native selected class:', c);
+          return;
+        }
+      }
+    }
   }
 
   function makeNavItem(menu, template, def) {
@@ -303,6 +339,7 @@
       item.textContent = def.label;
     }
     item.id = def.id;
+    item.classList.add('bz-nav-item');
     item.setAttribute('role', 'menuitem');
     item.setAttribute('tabindex', '0');
     item.style.cursor = 'pointer';
@@ -328,7 +365,11 @@
   function selectNavItem(menu, def) {
     clearActiveStates(menu);
     const item = menu.querySelector('#' + def.id);
-    if (item) item.classList.add('bz-item-active');
+    if (item) {
+      if (nativeActiveClass) item.classList.add(nativeActiveClass);
+      item.classList.add('bz-item-active');
+      item.setAttribute('aria-selected', 'true');
+    }
     openPage(def.key);
   }
 
@@ -346,6 +387,7 @@
     section.appendChild(header);
 
     const template = pickTemplateItem(menu);
+    detectNativeActiveClass(menu, template);
     for (const def of NAV_ITEMS) section.appendChild(makeNavItem(menu, template, def));
 
     menu.appendChild(section);
@@ -354,7 +396,7 @@
     // Native option selected -> restore native content, hide our pages.
     menu.addEventListener('click', (e) => {
       if (e.target.closest('#' + SECTION_ID)) return;
-      menu.querySelectorAll('.bz-item-active').forEach((el) => el.classList.remove('bz-item-active'));
+      clearBzActive(menu);
       restoreNative();
     });
   }
