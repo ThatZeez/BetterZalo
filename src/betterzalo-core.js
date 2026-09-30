@@ -8,9 +8,7 @@
   const CONFIG_KEY = 'better_zalo_config';
   const STYLE_ID = 'betterzalo-styles';
   const CUSTOM_CSS_ID = 'betterzalo-custom-css';
-  const DASHBOARD_ID = 'betterzalo-dashboard';
-  const SECTION_ID = 'better-zalo-tab'; // legacy AGENTS.md tab id -> section wrapper
-  const OVERVIEW_ITEM_ID = 'better-zalo-overview-tab'; // primary sidebar item
+  const SECTION_ID = 'better-zalo-section'; // sidebar section wrapper
 
   const log = (...a) => console.log(TAG, ...a);
   const warn = (...a) => console.warn(TAG, ...a);
@@ -152,7 +150,6 @@
       safeInvoke(id, 'onEnable', { ...rec.options });
       log(`auto-enabled "${id}" from saved config`);
     }
-    refreshPluginsView();
     return true;
   }
 
@@ -168,7 +165,6 @@
     delete s.plugins[id];
     putStore(s);
     log(`unregistered plugin "${id}"`);
-    refreshPluginsView();
     return true;
   }
 
@@ -186,7 +182,6 @@
     else safeInvoke(id, 'onDisable');
     persistPluginState(rec);
     log(`plugin "${id}" ${next ? 'enabled' : 'disabled'}`);
-    refreshPluginsView();
     return true;
   }
 
@@ -208,8 +203,8 @@
     // Reverse-engineered: Zalo theme tokens live on themed containers, not :root,
     // so every token chains a real token -> AGENTS.md example -> system color.
     // Verified live: --layer-background, --text-primary, --border exist; --main-background / --border-color do not.
+    // Native sidebar type token: --f14 (0.875rem / 14px).
     style.textContent = `
-    #${SECTION_ID} { display: contents; }
     .bz-section-header {
       padding: 12px 16px 4px; font-size: 12px; font-weight: 600;
       letter-spacing: .04em; text-transform: uppercase;
@@ -219,92 +214,18 @@
     .bz-item-active {
       background: var(--background-activeness, var(--layer-background-subtle, Highlight)) !important;
     }
-    #${DASHBOARD_ID} {
+    .bz-nav-label {
+      font-size: var(--f14, 0.875rem) !important;
+      font-weight: 400 !important;
+      line-height: 1.5 !important;
+    }
+    .bz-page {
       box-sizing: border-box; height: 100%; overflow-y: auto; padding: 20px 24px 32px;
       background: var(--layer-background, var(--main-background, Canvas));
       color: var(--text-primary, CanvasText);
       font: inherit;
     }
-    .bz-topbar {
-      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-      padding-bottom: 12px; margin-bottom: 16px;
-      border-bottom: 1px solid var(--border, var(--border-color, ButtonBorder));
-    }
-    .bz-title { font-size: 18px; font-weight: 700; margin-right: 8px; }
-    .bz-version {
-      font-size: 11px; padding: 2px 8px; border-radius: 9999px;
-      border: 1px solid var(--border, var(--border-color, ButtonBorder));
-      color: var(--text-secondary, var(--text-primary, GrayText));
-    }
-    .bz-tab {
-      border: 1px solid transparent; background: transparent; cursor: pointer;
-      color: inherit; font: inherit; font-size: 13px; font-weight: 600;
-      padding: 6px 12px; border-radius: 6px;
-    }
-    .bz-tab:hover { background: var(--background-inactiveness-subtle, var(--layer-background-subtle, ButtonFace)); }
-    .bz-tab[aria-selected="true"] {
-      border-color: var(--border, var(--border-color, ButtonBorder));
-      background: var(--background-activeness, var(--layer-background-subtle, Highlight));
-    }
-    .bz-grid { display: grid; gap: 12px; grid-template-columns: 1fr; }
-    @media (min-width: 900px) { .bz-grid.cols-2 { grid-template-columns: 1fr 1fr; } }
-    .bz-card {
-      border: 1px solid var(--border, var(--border-color, ButtonBorder));
-      border-radius: 8px; padding: 16px 18px;
-      background: var(--layer-background-subtle, var(--main-background, Canvas));
-    }
-    .bz-card h3 { margin: 0 0 4px; font-size: 14px; }
-    .bz-muted { color: var(--text-secondary, var(--text-primary, GrayText)); font-size: 12px; }
-    .bz-plugin-row {
-      display: flex; align-items: flex-start; gap: 12px;
-      border: 1px solid var(--border, var(--border-color, ButtonBorder));
-      border-radius: 8px; padding: 12px 14px; margin-bottom: 8px;
-      background: var(--layer-background-subtle, var(--main-background, Canvas));
-    }
-    .bz-plugin-main { flex: 1; min-width: 0; }
-    .bz-plugin-name { font-weight: 600; font-size: 13px; }
-    .bz-badge {
-      display: inline-block; font-size: 11px; margin-left: 8px; padding: 1px 8px;
-      border-radius: 9999px; border: 1px solid var(--border, var(--border-color, ButtonBorder));
-      color: var(--text-secondary, var(--text-primary, GrayText));
-    }
-    .bz-plugin-desc { font-size: 12px; color: var(--text-secondary, var(--text-primary, GrayText)); margin-top: 2px; }
-    .bz-switch {
-      position: relative; width: 36px; height: 20px; flex: none; cursor: pointer;
-      border-radius: 9999px; border: 1px solid var(--border-bold, var(--border, ButtonBorder));
-      background: var(--background-inactiveness, var(--layer-background-subtle, ButtonFace));
-    }
-    .bz-switch::after {
-      content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
-      border-radius: 50%; background: var(--text-secondary, GrayText); transition: transform 160ms ease;
-    }
-    .bz-switch[aria-checked="true"] { background: var(--accent-skyblue-text, Highlight); }
-    .bz-switch[aria-checked="true"]::after { transform: translateX(16px); background: var(--text-on-color, HighlightText); }
-    .bz-btn {
-      font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
-      border: 1px solid var(--border, var(--border-color, ButtonBorder));
-      background: var(--layer-background, var(--main-background, ButtonFace));
-      color: var(--text-primary, ButtonText); border-radius: 6px; padding: 6px 12px;
-    }
-    .bz-btn:hover { background: var(--background-inactiveness-subtle, var(--layer-background-subtle, ButtonFace)); }
-    .bz-btn:active { transform: scale(.98); }
-    .bz-btn.danger { color: var(--accent-red-text, var(--text-errors, ButtonText)); border-color: var(--border-errors, var(--border, ButtonBorder)); }
-    .bz-input, .bz-textarea, .bz-select {
-      font: inherit; font-size: 12px; width: 100%; box-sizing: border-box;
-      color: var(--text-primary, FieldText);
-      background: var(--layer-background, var(--main-background, Field));
-      border: 1px solid var(--border, var(--border-color, ButtonBorder));
-      border-radius: 6px; padding: 8px 10px;
-    }
-    .bz-textarea { min-height: 140px; font-family: ui-monospace, Consolas, monospace; resize: vertical; }
-    .bz-drawer {
-      margin-top: 8px; padding-top: 8px;
-      border-top: 1px solid var(--divider-bold, var(--border-subtle, var(--border, ButtonBorder)));
-    }
-    .bz-opt-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 12px; }
-    .bz-opt-row label { flex: 1; }
-    .bz-opt-row input[type="text"], .bz-opt-row input[type="number"] { width: 160px; }
-    .bz-row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .bz-page .setting-section { margin-bottom: 20px; }
     `;
     document.head.appendChild(style);
   }
@@ -324,17 +245,28 @@
     tag.textContent = customCSS;
   }
 
-  /* ---------- sidebar injection (settings modal is dynamic) ---------- */
+  /* ---------- sidebar navigation: three independent entries ---------- */
 
-  let currentView = 'overview';
+  const NAV_ITEMS = [
+    { key: 'betterzalo', id: 'better-zalo-tab', label: 'BetterZalo' },
+    { key: 'plugins', id: 'better-zalo-plugins-tab', label: 'Plugins' },
+    { key: 'themes', id: 'better-zalo-themes-tab', label: 'Themes Library' },
+  ];
+
+  let currentView = 'betterzalo';
   let observer = null;
 
-  // Reverse-engineered hook: .setting-menu only exists while the settings modal is open.
+  // Reverse-engineered hooks: the settings modal mounts lazily, so
+  // div.setting-menu and #setting-right only exist while settings are open.
   function findSettingMenu() {
     return document.querySelector('div.setting-menu');
   }
-  function findContentBody() {
-    return document.querySelector('div.setting-content-body');
+  function findSettingsContent() {
+    // Confirmed main settings content container.
+    return document.querySelector('#setting-right');
+  }
+  function findNativeNav(root) {
+    return root.querySelector('.stack-navigation');
   }
 
   function pickTemplateItem(menu) {
@@ -353,6 +285,53 @@
     });
   }
 
+  function makeNavItem(menu, template, def) {
+    // Clone a native item so structure/classes match Zalo exactly.
+    let item;
+    let labelNode = null;
+    if (template) {
+      item = template.cloneNode(true); // keep native classes
+      item.removeAttribute('id');
+      item.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
+      // Replace visible label, keep icon nodes intact.
+      labelNode = [...item.querySelectorAll('span, div, p')]
+        .find((n) => n.children.length === 0 && n.textContent.trim());
+      if (labelNode) labelNode.textContent = def.label;
+      else item.textContent = def.label;
+    } else {
+      item = document.createElement('div');
+      item.textContent = def.label;
+    }
+    item.id = def.id;
+    item.setAttribute('role', 'menuitem');
+    item.setAttribute('tabindex', '0');
+    item.style.cursor = 'pointer';
+    // Exact native sidebar type: 14px via the --f14 token.
+    const label = labelNode || item;
+    label.classList.add('bz-nav-label');
+    label.style.fontSize = 'var(--f14, 0.875rem)';
+    label.style.fontWeight = '400';
+    label.style.lineHeight = '1.5';
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectNavItem(menu, def);
+    });
+    item.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        item.click();
+      }
+    });
+    return item;
+  }
+
+  function selectNavItem(menu, def) {
+    clearActiveStates(menu);
+    const item = menu.querySelector('#' + def.id);
+    if (item) item.classList.add('bz-item-active');
+    openPage(def.key);
+  }
+
   function injectSidebar(menu) {
     if (menu.dataset.bzInjected === '1') return;
     menu.dataset.bzInjected = '1';
@@ -366,138 +345,48 @@
     header.textContent = 'BetterZalo Settings';
     section.appendChild(header);
 
-    // Clone a native item so spacing/typography match Zalo exactly.
     const template = pickTemplateItem(menu);
-    let item;
-    if (template) {
-      item = template.cloneNode(true); // keep native classes
-      item.removeAttribute('id');
-      item.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
-      // Replace visible label, keep icon nodes intact.
-      const labelNode = [...item.querySelectorAll('span, div, p')]
-        .find((n) => n.children.length === 0 && n.textContent.trim());
-      if (labelNode) labelNode.textContent = 'BetterZalo';
-      else item.textContent = 'BetterZalo';
-    } else {
-      item = document.createElement('div');
-      item.textContent = 'BetterZalo';
-    }
-    item.id = OVERVIEW_ITEM_ID;
-    item.setAttribute('role', 'menuitem');
-    item.setAttribute('tabindex', '0');
-    item.style.cursor = 'pointer';
-    item.addEventListener('click', (e) => {
-      e.stopPropagation();
-      clearActiveStates(menu);
-      item.classList.add('bz-item-active');
-      openDashboard('overview');
-    });
-    item.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        item.click();
-      }
-    });
-    section.appendChild(item);
+    for (const def of NAV_ITEMS) section.appendChild(makeNavItem(menu, template, def));
 
     menu.appendChild(section);
-    log('sidebar injected');
+    log('sidebar injected: 3 entries');
 
-    // Native item clicked -> restore native panels, dim our item.
+    // Native option selected -> restore native content, hide our pages.
     menu.addEventListener('click', (e) => {
-      const ours = e.target.closest('#' + OVERVIEW_ITEM_ID);
-      if (ours) return;
-      const bzItem = menu.querySelector('#' + OVERVIEW_ITEM_ID);
-      if (bzItem) bzItem.classList.remove('bz-item-active');
-      const body = findContentBody();
-      if (body) setNativePanelsVisible(body, true);
-      const dash = document.getElementById(DASHBOARD_ID);
-      if (dash) dash.style.display = 'none';
+      if (e.target.closest('#' + SECTION_ID)) return;
+      menu.querySelectorAll('.bz-item-active').forEach((el) => el.classList.remove('bz-item-active'));
+      restoreNative();
     });
   }
 
-  function setNativePanelsVisible(body, visible) {
-    [...body.children].forEach((child) => {
-      if (child.id === DASHBOARD_ID) return;
-      if (visible) {
-        child.style.display = child.dataset.bzPrevDisplay || '';
-        delete child.dataset.bzPrevDisplay;
-      } else if (child.style.display !== 'none') {
-        child.dataset.bzPrevDisplay = child.style.display;
-        child.style.display = 'none';
-      }
-    });
+  function hideNativeNav(root) {
+    const nav = findNativeNav(root);
+    if (nav && nav.style.display !== 'none') {
+      nav.dataset.bzPrevDisplay = nav.style.display;
+      nav.style.display = 'none';
+    }
   }
 
-  /* ---------- dashboard ---------- */
-
-  function openDashboard(view) {
-    ensureStyle();
-    currentView = view || currentView || 'overview';
-    const body = findContentBody();
-    if (!body) {
-      warn('openDashboard: div.setting-content-body not found');
-      return;
+  function restoreNative() {
+    const root = findSettingsContent();
+    if (!root) return;
+    const nav = findNativeNav(root);
+    if (nav) {
+      nav.style.display = nav.dataset.bzPrevDisplay || '';
+      delete nav.dataset.bzPrevDisplay;
     }
-    setNativePanelsVisible(body, false);
-    let dash = document.getElementById(DASHBOARD_ID);
-    if (!dash) {
-      dash = document.createElement('div');
-      dash.id = DASHBOARD_ID;
-      body.appendChild(dash);
-    }
-    dash.style.display = '';
-    renderDashboard(dash, currentView);
-    log('dashboard opened:', currentView);
+    const page = root.querySelector(':scope > .bz-page');
+    if (page) page.style.display = 'none';
+    log('native settings restored');
   }
 
-  function renderDashboard(root, view) {
-    root.innerHTML = '';
-    root.appendChild(buildTopbar(view));
-    const content = document.createElement('div');
-    content.className = 'bz-content';
-    content.dataset.view = view;
-    if (view === 'plugins') content.appendChild(renderPlugins());
-    else if (view === 'themes') content.appendChild(renderThemes());
-    else if (view === 'settings') content.appendChild(renderGeneral());
-    else content.appendChild(renderOverview());
-    root.appendChild(content);
-  }
+  /* ---------- placeholder pages (UI/navigation only) ---------- */
 
-  function buildTopbar(active) {
-    const bar = document.createElement('div');
-    bar.className = 'bz-topbar';
-    const title = document.createElement('span');
-    title.className = 'bz-title';
-    title.textContent = 'BetterZalo';
-    const ver = document.createElement('span');
-    ver.className = 'bz-version';
-    ver.textContent = 'v' + VERSION;
-    bar.append(title, ver);
-    const tabs = [
-      ['overview', 'BetterZalo'],
-      ['plugins', 'Plugins'],
-      ['themes', 'Themes'],
-      ['settings', 'General Settings'],
-    ];
-    for (const [key, label] of tabs) {
-      if (key === 'overview') continue; // overview is the sidebar landing item
-      const b = document.createElement('button');
-      b.className = 'bz-tab';
-      b.textContent = label;
-      b.setAttribute('aria-selected', String(active === key));
-      b.addEventListener('click', () => openDashboard(key));
-      bar.appendChild(b);
-    }
-    // Spec views: Plugins | Themes | General Settings (overview via sidebar).
-    if (active === 'overview') {
-      const hint = document.createElement('span');
-      hint.className = 'bz-muted';
-      hint.textContent = 'Main Dashboard';
-      bar.appendChild(hint);
-    }
-    return bar;
-  }
+  const PAGE_COPY = {
+    betterzalo: { label: 'BetterZalo', body: 'BetterZalo settings will be available here in a future update.' },
+    plugins: { label: 'Plugins', body: 'Plugin management will be available here in a future update.' },
+    themes: { label: 'Themes Library', body: 'The themes library will be available here in a future update.' },
+  };
 
   function el(tag, cls, text) {
     const n = document.createElement(tag);
@@ -506,270 +395,38 @@
     return n;
   }
 
-  function renderOverview() {
-    const wrap = el('div', 'bz-grid cols-2');
-    const info = el('div', 'bz-card');
-    info.appendChild(el('h3', null, 'Client Info'));
-    const count = registry.size;
-    const enabled = [...registry.values()].filter((p) => p.enabled).length;
-    const lines = [
-      `BetterZalo v${VERSION}`,
-      `Plugins: ${enabled}/${count} enabled`,
-      `Theme CSS: ${getStore().settings.cssEnabled ? 'on' : 'off'}`,
-      `UA: ${navigator.userAgent.slice(0, 90)}…`,
-    ];
-    const ul = el('div', 'bz-muted');
-    ul.style.whiteSpace = 'pre-line';
-    ul.textContent = lines.join('\n');
-    info.appendChild(ul);
-
-    const quick = el('div', 'bz-card');
-    quick.appendChild(el('h3', null, 'Quick Actions'));
-    quick.appendChild(el('div', 'bz-muted', 'Reserved container — future actions plug in here.'));
-    const row = el('div', 'bz-row-actions');
-    const btnCSS = el('button', 'bz-btn', 'Open QuickCSS');
-    btnCSS.addEventListener('click', () => openDashboard('themes'));
-    const btnExport = el('button', 'bz-btn', 'Export Config');
-    btnExport.addEventListener('click', exportConfig);
-    const btnRelaunch = el('button', 'bz-btn', 'Relaunch');
-    btnRelaunch.addEventListener('click', () => location.reload());
-    const btnFolder = el('button', 'bz-btn', 'Open Folder');
-    btnFolder.addEventListener('click', () => log('Open Folder: reserved for native shell hook'));
-    row.append(btnCSS, btnExport, btnRelaunch, btnFolder);
-    quick.appendChild(row);
-
-    wrap.append(info, quick);
-    const host = el('div');
-    host.appendChild(wrap);
-    return host;
-  }
-
-  function toggleSwitch(checked, onFlip, label) {
-    const b = document.createElement('button');
-    b.className = 'bz-switch';
-    b.setAttribute('role', 'switch');
-    b.setAttribute('aria-checked', String(!!checked));
-    if (label) b.setAttribute('aria-label', label);
-    b.addEventListener('click', () => {
-      const next = b.getAttribute('aria-checked') !== 'true';
-      b.setAttribute('aria-checked', String(next));
-      onFlip(next);
-    });
-    return b;
-  }
-
-  function renderPlugins() {
-    const host = el('div');
-    if (registry.size === 0) {
-      const empty = el('div', 'bz-card');
-      empty.appendChild(el('h3', null, 'No plugins registered'));
-      empty.appendChild(el('div', 'bz-muted', 'Plugins appear here after calling BetterZalo.registerPlugin({...}).'));
-      host.appendChild(empty);
-      return host;
+  function openPage(view) {
+    ensureStyle();
+    if (!PAGE_COPY[view]) view = 'betterzalo';
+    currentView = view;
+    const root = findSettingsContent();
+    if (!root) {
+      warn('openPage: #setting-right not found');
+      return;
     }
-    for (const rec of registry.values()) {
-      const row = el('div', 'bz-plugin-row');
-      const main = el('div', 'bz-plugin-main');
-      const nameLine = el('div');
-      nameLine.appendChild(el('span', 'bz-plugin-name', rec.name));
-      const badge = el('span', 'bz-badge', 'v' + rec.version);
-      nameLine.appendChild(badge);
-      main.appendChild(nameLine);
-      if (rec.description) main.appendChild(el('div', 'bz-plugin-desc', rec.description));
-
-      const drawer = el('div', 'bz-drawer');
-      drawer.style.display = 'none';
-      drawer.appendChild(buildOptionsEditor(rec));
-
-      const actions = el('div', 'bz-row-actions');
-      const optBtn = el('button', 'bz-btn', 'Options');
-      optBtn.addEventListener('click', () => {
-        drawer.style.display = drawer.style.display === 'none' ? '' : 'none';
-      });
-      actions.appendChild(optBtn);
-      main.appendChild(actions);
-      main.appendChild(drawer);
-
-      const sw = toggleSwitch(rec.enabled, (next) => setEnabled(rec.id, next), `Enable ${rec.name}`);
-      row.append(main, sw);
-      host.appendChild(row);
+    hideNativeNav(root);
+    let page = root.querySelector(':scope > .bz-page');
+    if (!page) {
+      page = document.createElement('div');
+      page.className = 'bz-page';
+      root.appendChild(page);
     }
-    return host;
+    page.style.display = '';
+    page.dataset.view = view;
+    renderPage(page, view);
+    log('page opened:', view);
   }
 
-  function buildOptionsEditor(rec) {
-    const host = el('div');
-    const keys = Object.keys(rec.options || {});
-    if (keys.length === 0) {
-      host.appendChild(el('div', 'bz-muted', 'No options for this plugin.'));
-      return host;
-    }
-    for (const key of keys) {
-      const val = rec.options[key];
-      const row = el('div', 'bz-opt-row');
-      const label = el('label', null, key);
-      let input;
-      if (typeof val === 'boolean') {
-        input = document.createElement('input');
-        input.type = 'checkbox';
-        input.checked = val;
-        input.addEventListener('change', () => {
-          setPluginOptions(rec.id, { ...rec.options, [key]: input.checked });
-        });
-      } else if (typeof val === 'number') {
-        input = document.createElement('input');
-        input.type = 'number';
-        input.className = 'bz-input';
-        input.value = String(val);
-        input.addEventListener('change', () => {
-          setPluginOptions(rec.id, { ...rec.options, [key]: Number(input.value) });
-        });
-      } else {
-        input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'bz-input';
-        input.value = String(val ?? '');
-        input.addEventListener('change', () => {
-          setPluginOptions(rec.id, { ...rec.options, [key]: input.value });
-        });
-      }
-      row.append(label, input);
-      host.appendChild(row);
-    }
-    return host;
-  }
-
-  function refreshPluginsView() {
-    const dash = document.getElementById(DASHBOARD_ID);
-    if (!dash) return;
-    const content = dash.querySelector('.bz-content[data-view="plugins"]');
-    if (!content) return;
-    content.innerHTML = '';
-    content.appendChild(renderPlugins());
-  }
-
-  function renderThemes() {
-    const host = el('div', 'bz-grid');
-    const card = el('div', 'bz-card');
-    card.appendChild(el('h3', null, 'Custom CSS'));
-    card.appendChild(el('div', 'bz-muted', 'Placeholder for custom CSS injection. Saved to better_zalo_config.'));
-    const s = getStore().settings;
-    const row = el('div', 'bz-opt-row');
-    row.appendChild(el('label', null, 'Enable custom CSS'));
-    const sw = toggleSwitch(!!s.cssEnabled, (next) => {
-      const st = getStore();
-      st.settings.cssEnabled = next;
-      putStore(st);
-      applyCustomCSS();
-      log('custom CSS ' + (next ? 'enabled' : 'disabled'));
-    }, 'Enable custom CSS');
-    row.appendChild(sw);
-    card.appendChild(row);
-    const area = el('textarea', 'bz-textarea');
-    area.value = s.customCSS || '';
-    area.setAttribute('placeholder', '/* BetterZalo QuickCSS — uses Zalo vars, e.g. color: var(--text-primary); */');
-    area.setAttribute('spellcheck', 'false');
-    card.appendChild(area);
-    const actions = el('div', 'bz-row-actions');
-    const save = el('button', 'bz-btn', 'Save & Apply');
-    save.addEventListener('click', () => {
-      const st = getStore();
-      st.settings.customCSS = area.value;
-      st.settings.cssEnabled = true;
-      putStore(st);
-      applyCustomCSS();
-      log('custom CSS saved (' + area.value.length + ' chars)');
-      openDashboard('themes');
-    });
-    actions.appendChild(save);
-    card.appendChild(actions);
-    host.appendChild(card);
-    return host;
-  }
-
-  function downloadText(filename, text) {
-    try {
-      const blob = new Blob([text], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        URL.revokeObjectURL(a.href);
-        a.remove();
-      }, 500);
-    } catch (e) {
-      err('export failed:', e);
-    }
-  }
-
-  function exportConfig() {
-    const json = storage.export();
-    downloadText('better-zalo-config.json', json);
-    log('config exported');
-  }
-
-  function renderGeneral() {
-    const host = el('div', 'bz-grid cols-2');
-    const fw = el('div', 'bz-card');
-    fw.appendChild(el('h3', null, 'Framework'));
-    const tRow = el('div', 'bz-opt-row');
-    tRow.appendChild(el('label', null, 'Telemetry'));
-    const st = getStore().settings;
-    tRow.appendChild(toggleSwitch(!!st.telemetry, (next) => {
-      const s = getStore();
-      s.settings.telemetry = next;
-      putStore(s);
-      log('telemetry ' + (next ? 'on' : 'off'));
-    }, 'Telemetry'));
-    fw.appendChild(tRow);
-    const actions = el('div', 'bz-row-actions');
-    const exp = el('button', 'bz-btn', 'Export Config');
-    exp.addEventListener('click', exportConfig);
-    const imp = el('button', 'bz-btn', 'Import Config');
-    imp.addEventListener('click', () => fileInput.click());
-    const reset = el('button', 'bz-btn danger', 'Reset All');
-    reset.addEventListener('click', () => {
-      if (!window.confirm('Reset BetterZalo config? This disables all plugins.')) return;
-      storage.reset();
-      applyCustomCSS();
-      log('config reset');
-      openDashboard('settings');
-    });
-    actions.append(exp, imp, reset);
-    fw.appendChild(actions);
-
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = 'application/json,.json';
-    fileInput.style.display = 'none';
-    fileInput.addEventListener('change', () => {
-      const f = fileInput.files && fileInput.files[0];
-      if (!f) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          storage.import(String(reader.result));
-          applyCustomCSS();
-          log('config imported');
-          openDashboard('settings');
-        } catch (e) {
-          err('import failed:', e);
-          window.alert('Import failed: invalid config file.');
-        }
-      };
-      reader.readAsText(f);
-      fileInput.value = '';
-    });
-    fw.appendChild(fileInput);
-
-    const about = el('div', 'bz-card');
-    about.appendChild(el('h3', null, 'About'));
-    about.appendChild(el('div', 'bz-muted',
-      `BetterZalo v${VERSION} — modular settings framework for Zalo PC/Web.\nStorage key: ${CONFIG_KEY}`));
-    host.append(fw, about);
-    return host;
+  function renderPage(page, view) {
+    page.innerHTML = '';
+    const copy = PAGE_COPY[view];
+    // Native settings section structure.
+    const section = el('div', 'setting-section');
+    section.appendChild(el('div', 'setting-section-label', copy.label));
+    const content = el('div', 'setting-section-content');
+    content.appendChild(el('div', 'setting-section-content__item', copy.body));
+    section.appendChild(content);
+    page.appendChild(section);
   }
 
   /* ---------- boot ---------- */
@@ -793,7 +450,7 @@
       setPluginOptions,
       listPlugins: () => [...registry.values()],
       storage,
-      ui: { openDashboard, refresh: () => openDashboard(currentView) },
+      ui: { openPage, refresh: () => openPage(currentView) },
       __booted: true,
     };
     window.BetterZalo = api;
