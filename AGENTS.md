@@ -18,6 +18,8 @@ BetterZalo is a modular, persistent modding framework for Zalo PC and Zalo Web. 
 - Section header text is the literal `BetterZalo Settings` (no `text-transform` override)
 - Sidebar icons reuse Zalo's own icon mechanism (cloned `<i class="fa fa-<Name> setting-menu__icon">`, glyph swapped via the `fa-` class only: `zalo-font` + `:after{content}` + 18px box all come from Zalo's CSS): BetterZalo->`Setting_24_Line`, Plugins->`Utility_24_Line`, Themes Library->`Theme_24_Line` (no new library, no custom drawing, no geometry change)
 - Sidebar item template must be a real `.setting-menu__item` (never the header); clones strip `selected`/`disabled` and `data-translate-*` hooks so labels never revert
+- Page background uses the native content token `var(--surface-background-subtle)` (no hardcoded colors)
+- Placeholder items keep the native `setting-section-content__item` class but add BZ-scoped `bz-placeholder` (`background-color: transparent` under `.bz-page` only; never override the native class globally)
 
 ## Plugin Manager Architecture
 - All plugins register through `window.BetterZalo.registerPlugin(config)`
