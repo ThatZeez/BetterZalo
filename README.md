@@ -1,2 +1,2 @@
-# BetterZalo
+# Project currently in development!!!
 
