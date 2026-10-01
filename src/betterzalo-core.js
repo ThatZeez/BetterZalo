@@ -207,7 +207,8 @@
     style.textContent = `
     .bz-section-header {
       padding: 12px 16px 4px; font-size: 12px; font-weight: 600;
-      letter-spacing: .04em; text-transform: uppercase;
+      letter-spacing: .04em;
+      /* Header keeps its literal capitalization ("BetterZalo Settings"); no case override. */
       color: var(--text-secondary, var(--text-primary, GrayText));
       user-select: none;
     }
@@ -276,9 +277,15 @@
   /* ---------- sidebar navigation: three independent entries ---------- */
 
   const NAV_ITEMS = [
-    { key: 'betterzalo', id: 'better-zalo-tab', label: 'BetterZalo' },
-    { key: 'plugins', id: 'better-zalo-plugins-tab', label: 'Plugins' },
-    { key: 'themes', id: 'better-zalo-themes-tab', label: 'Themes Library' },
+    // icon: native Zalo glyph name reused 1:1 from the matching settings entry.
+    // Reverse-engineered from Zalo's shipped renderer (compact-app-pc bundle):
+    // item = .setting-menu__item > .setting-menu__wrapper-content >
+    //        Icon[className="<name> setting-menu__icon"] + p.setting-menu__name.
+    // Settings list pairs title->icon: STR_GENERAL->Setting_24_Line,
+    // STR_UTILITIES->Utility_24_Line, STR_SETTINGS_THEME (Giao diện)->Theme_24_Line.
+    { key: 'betterzalo', id: 'better-zalo-tab', label: 'BetterZalo', icon: 'Setting_24_Line' },
+    { key: 'plugins', id: 'better-zalo-plugins-tab', label: 'Plugins', icon: 'Utility_24_Line' },
+    { key: 'themes', id: 'better-zalo-themes-tab', label: 'Themes Library', icon: 'Theme_24_Line' },
   ];
 
   let currentView = 'betterzalo';
@@ -299,7 +306,13 @@
   }
 
   function pickTemplateItem(menu) {
+    // A real native item carries the full structure:
+    // .setting-menu__wrapper-content > i.fa.*.setting-menu__icon + p.setting-menu__name.
+    // Never clone our own section or the header (neither has the icon node).
+    const natives = [...menu.querySelectorAll('.setting-menu__item')]
+      .filter((n) => !n.closest('#' + SECTION_ID));
     return (
+      natives[0] ||
       menu.querySelector('[role="menuitem"], [role="tab"], li, div > div') ||
       menu.firstElementChild
     );
@@ -323,7 +336,8 @@
   }
 
   // Prefer the actual native selected mechanism over recreated styling:
-  // capture the marker class from the currently selected native item.
+  // Zalo's own stylesheet uses `.setting-menu__item.selected` for it, so the
+  // marker is almost always the `selected` class; still detected, not assumed.
   function detectNativeActiveClass(menu, template) {
     const base = new Set(template ? [...template.classList] : []);
     const flagged = menu.querySelector('[aria-selected="true"]');
@@ -332,6 +346,15 @@
       : [...menu.querySelectorAll('[class*="active"], [class*="selected"]')];
     for (const cand of candidates) {
       if (cand.closest('#' + SECTION_ID)) continue; // ignore our own items
+      for (const c of [...cand.classList]) {
+        // Exact state markers first (template itself may be the selected item,
+        // in which case the base-class diff below would find nothing).
+        if (/^(selected|active)$/i.test(c)) {
+          nativeActiveClass = c;
+          log('reusing native selected class:', c);
+          return;
+        }
+      }
       for (const c of [...cand.classList]) {
         if (!base.has(c) && /active|selected/i.test(c)) {
           nativeActiveClass = c;
@@ -342,6 +365,15 @@
     }
   }
 
+  // Native icon mechanism, verified in Zalo's shipped stylesheet
+  // (default-login-startup + compact-app-pc bundles):
+  //   <i class="fa fa-<Name> setting-menu__icon">
+  //   .fa{...font:... zalo-font}            -> icon font (FontAwesome-style)
+  //   .fa-<Name>:after{content:"..."}        -> the glyph itself
+  //   .setting-menu__icon{18px box, 10px gap} -> size/alignment/spacing
+  // Reuse means: keep the cloned <i>, swap only the glyph class (see
+  // makeNavItem). No custom drawing, no library, no pseudo-element copy.
+
   function makeNavItem(menu, template, def) {
     // Clone a native item so structure/classes match Zalo exactly.
     let item;
@@ -350,11 +382,33 @@
       item = template.cloneNode(true); // keep native classes
       item.removeAttribute('id');
       item.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
+      // Never inherit state from the template: a cloned `selected`/`disabled`
+      // would light up (or dim) all three entries at once.
+      item.classList.remove('selected', 'disabled');
+      item.removeAttribute('aria-selected');
       // Replace visible label, keep icon nodes intact.
       labelNode = [...item.querySelectorAll('span, div, p')]
         .find((n) => n.children.length === 0 && n.textContent.trim());
-      if (labelNode) labelNode.textContent = def.label;
-      else item.textContent = def.label;
+      if (labelNode) {
+        labelNode.textContent = def.label;
+        // Zalo re-applies translations via data-translate-* on language change;
+        // drop those hooks so our label is never reverted to a native string.
+        [...labelNode.attributes].forEach((a) => {
+          if (/^data-translate/i.test(a.name)) labelNode.removeAttribute(a.name);
+        });
+      } else item.textContent = def.label;
+      // Per-entry icon: reuse the cloned native <i>, swap only its glyph class
+      // to this entry's verified Zalo icon name (def.icon). The element keeps
+      // `fa` + `setting-menu__icon`, so Zalo's own font, glyph, size, color
+      // and alignment apply untouched.
+      const iconEl = item.querySelector('i.fa, i.setting-menu__icon, [class*="setting-menu__icon"]');
+      if (iconEl && def.icon) {
+        // Array.from: works on array-like classList even where it is not iterable.
+        Array.from(iconEl.classList)
+          .filter((c) => c !== 'fa' && c !== 'setting-menu__icon' && /^fa-/i.test(c))
+          .forEach((c) => iconEl.classList.remove(c));
+        iconEl.classList.add('fa-' + def.icon);
+      }
     } else {
       item = document.createElement('div');
       item.textContent = def.label;
