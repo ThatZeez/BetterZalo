@@ -211,11 +211,35 @@
       color: var(--text-secondary, var(--text-primary, GrayText));
       user-select: none;
     }
-    .bz-item-active {
+    .bz-nav-item {
+      /* Confirmed native item geometry, applied identically in both states
+         so selecting never moves siblings. The clone carries native classes,
+         but the template picker can return a wrapper-level node missing the
+         item box; this guarantees the 40px inset highlight box regardless. */
+      box-sizing: border-box !important;
+      height: 40px !important;
+      margin: 4px 8px !important;
+      padding: 0 8px !important;
+      border-radius: 6px !important;
+    }
+    /* Hover (paint-only, CSS :hover, no JS handlers). Reverse-engineered:
+       Zalo toggles the "dark" class on <body> per theme (verified live:
+       removing/adding it flips --layer-background-hover between #f1f2f4 and
+       white 5%). #2d3136 is the solid equivalent of the native dark hover
+       (white 5% over #22262b sidebar), #f1f2f4 the native light hover. */
+    .bz-nav-item:hover {
+      background-color: #f1f2f4;
+    }
+    body.dark .bz-nav-item:hover,
+    html.dark .bz-nav-item:hover {
+      background-color: #2d3136;
+    }
+    .bz-item-active,
+    .bz-item-active:hover {
       /* Paint-only selected state: background on the existing item itself.
-         Geometry comes from the cloned native classes and is identical in
-         both states, so selecting never moves siblings. Never put height,
-         margin, padding, line-height, or positioning here. */
+         Geometry lives on .bz-nav-item above (same both states). Never put
+         height, margin, padding, line-height, or positioning here.
+         !important keeps the selected background winning over :hover. */
       background-color: var(--layer-background-selected, var(--background-activeness, Highlight)) !important;
     }
     .bz-nav-label {
