@@ -212,13 +212,10 @@
       user-select: none;
     }
     .bz-item-active {
-      /* Fallback selected state: exact native geometry. When the real native
-         selected class is detected it is reused instead (see detectNativeActiveClass);
-         this rule only guarantees the confirmed look when it is not determinable. */
-      height: 40px !important;
-      margin: 4px 8px !important;
-      padding: 0 8px !important;
-      border-radius: 6px !important;
+      /* Paint-only selected state: background on the existing item itself.
+         Geometry comes from the cloned native classes and is identical in
+         both states, so selecting never moves siblings. Never put height,
+         margin, padding, line-height, or positioning here. */
       background-color: var(--layer-background-selected, var(--background-activeness, Highlight)) !important;
     }
     .bz-nav-label {
