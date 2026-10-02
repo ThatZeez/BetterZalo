@@ -244,6 +244,17 @@ onDisable()
 onOptionsChange(newOptions)
 ```
 
+Optional plugin fields: `requiresRestart` (enable/option changes are staged and
+applied on restart instead of live) and `optionsSchema` (array of
+`{ key, label, description }` rendered generically by the Plugins settings UI).
+
+Plugins live in `src/plugins/<plugin-id>/`, one folder per plugin. The Plugins
+page renders one card per registered plugin (name, description, enable toggle,
+gear button opening a modal over a dark backdrop). `BetterZalo.restart()`
+(`location.reload()`) applies staged `requiresRestart` changes; the Plugins
+page shows a single restart banner while any are pending. Toggles reuse Zalo's
+native `.z-toggle` + `fa-toggle-*` mechanism; gear/close use native `fa` glyphs.
+
 Configuration persistence uses:
 
 ```text

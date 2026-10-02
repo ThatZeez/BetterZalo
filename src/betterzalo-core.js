@@ -98,7 +98,7 @@
       err('registerPlugin: expected a plugin object');
       return false;
     }
-    const { id, name, version, description, author } = pluginObj;
+    const { id, name, version, description, author, requiresRestart, optionsSchema } = pluginObj;
     if (typeof id !== 'string' || !id.trim()) {
       err('registerPlugin: "id" must be a non-empty string');
       return false;
@@ -117,6 +117,10 @@
       err(`registerPlugin("${id}"): "onOptionsChange" must be a function`);
       return false;
     }
+    if (pluginObj.optionsSchema !== undefined && !Array.isArray(pluginObj.optionsSchema)) {
+      err(`registerPlugin("${id}"): "optionsSchema" must be an array`);
+      return false;
+    }
     if (registry.has(id)) {
       warn(`registerPlugin: "${id}" already registered, skipping`);
       return false;
@@ -128,6 +132,10 @@
       version: typeof version === 'string' ? version : '0.0.0',
       description: typeof description === 'string' ? description : '',
       author: typeof author === 'string' ? author : '',
+      requiresRestart: !!requiresRestart,
+      optionsSchema: Array.isArray(optionsSchema)
+        ? optionsSchema.filter((o) => o && typeof o.key === 'string' && typeof o.label === 'string')
+        : [],
       onEnable: pluginObj.onEnable,
       onDisable: pluginObj.onDisable,
       onOptionsChange: pluginObj.onOptionsChange || (() => {}),
@@ -164,15 +172,22 @@
     return registry.get(id) || null;
   }
 
+  const pendingRestart = new Set();
+
   function setEnabled(id, enabled) {
     const rec = registry.get(id);
     if (!rec) return false;
     const next = !!enabled;
     if (rec.enabled === next) return true;
     rec.enabled = next;
+    persistPluginState(rec);
+    if (rec.requiresRestart) {
+      pendingRestart.add(id);
+      log(`plugin "${id}" ${next ? 'enabled' : 'disabled'} (pending restart)`);
+      return true;
+    }
     if (next) safeInvoke(id, 'onEnable', { ...rec.options });
     else safeInvoke(id, 'onDisable');
-    persistPluginState(rec);
     log(`plugin "${id}" ${next ? 'enabled' : 'disabled'}`);
     return true;
   }
@@ -182,8 +197,22 @@
     if (!rec) return false;
     rec.options = { ...(nextOptions || {}) };
     persistPluginState(rec);
+    if (rec.requiresRestart) {
+      pendingRestart.add(id);
+      log(`plugin "${id}" options staged (pending restart)`);
+      return true;
+    }
     safeInvoke(id, 'onOptionsChange', { ...rec.options });
     return true;
+  }
+
+  function isRestartPending() {
+    return pendingRestart.size > 0;
+  }
+
+  function restart() {
+    log('restarting to apply plugin changes');
+    location.reload();
   }
 
   function ensureStyle() {
@@ -232,6 +261,118 @@
     }
     .bz-page .setting-section { margin-bottom: 20px; }
     .bz-page .bz-placeholder { background-color: transparent; }
+    .bz-plugin-card {
+      display: flex; flex-direction: column; gap: 8px;
+      background-color: var(--layer-background);
+      border: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.25));
+      border-radius: 8px; padding: 12px 16px; margin: 0;
+    }
+    .bz-plugin-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px;
+    }
+    .bz-plugin-card__header { display: flex; align-items: center; gap: 4px; }
+    .bz-plugin-card__name {
+      flex: 1 1 auto; min-width: 0; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap;
+      color: var(--text-primary);
+      font-size: var(--f14, 0.875rem); font-weight: 500; line-height: 1.5;
+    }
+    .bz-plugin-card__desc {
+      color: var(--text-secondary);
+      font-size: var(--f13, 0.8125rem); font-weight: 400; line-height: 1.5;
+    }
+    .bz-plugin-card__controls { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; }
+    .bz-icon-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; border: 0; border-radius: 6px;
+      background: transparent; cursor: pointer;
+      color: var(--icon-secondary, var(--text-secondary));
+      font-size: 1.125rem;
+      transition: background-color 150ms ease, color 150ms ease;
+    }
+    .bz-icon-btn:hover { background-color: var(--layer-background-hover); color: var(--icon-primary, var(--text-primary)); }
+    .bz-icon-btn:active { transform: scale(0.95); }
+    .bz-icon-btn:focus-visible, .bz-restart-btn:focus-visible, .z-toggle[role="switch"]:focus-visible {
+      outline: 2px solid var(--button-primary-normal); outline-offset: 2px;
+    }
+    .bz-restart-banner {
+      background-color: rgba(0, 104, 255, 0.08);
+      background-color: color-mix(in srgb, var(--button-primary-normal) 12%, transparent);
+      border: 1px solid var(--button-primary-normal);
+      border-radius: 8px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+      padding: 12px 16px; margin: 0 0 16px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .bz-restart-banner__text { min-width: 0; }
+    .bz-restart-banner__title {
+      color: var(--text-primary);
+      font-size: var(--f14, 0.875rem); font-weight: 500; line-height: 1.5;
+    }
+    .bz-restart-banner__sub {
+      color: var(--text-secondary);
+      font-size: var(--f13, 0.8125rem); font-weight: 400; line-height: 1.5;
+    }
+    .bz-restart-btn {
+      width: 100%; cursor: pointer;
+      border: 1px solid var(--button-primary-normal); border-radius: 6px;
+      background: transparent; color: var(--button-primary-normal);
+      font-size: var(--f14, 0.875rem); font-weight: 500; line-height: 1.5;
+      padding: 6px 16px;
+      transition: background-color 150ms ease, color 150ms ease;
+    }
+    .bz-restart-btn:hover {
+      background-color: var(--button-primary-normal); color: var(--button-primary-text);
+    }
+    .bz-restart-btn:active { transform: scale(0.97); }
+    .bz-modal-backdrop {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0.55);
+      animation: bz-fade-in 160ms ease-out;
+    }
+    .bz-modal {
+      width: min(440px, calc(100% - 48px)); max-height: calc(100% - 64px);
+      overflow-y: auto;
+      background-color: var(--layer-background);
+      border: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.25));
+      border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      padding: 16px;
+      animation: bz-pop-in 180ms ease-out;
+    }
+    @keyframes bz-fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes bz-pop-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+    @media (prefers-reduced-motion: reduce) {
+      .bz-modal-backdrop, .bz-modal { animation: none; }
+      .bz-icon-btn, .bz-restart-btn { transition: none; }
+    }
+    .bz-modal__header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 4px; }
+    .bz-modal__title {
+      flex: 1 1 auto; color: var(--text-primary);
+      font-size: var(--f16, 1rem); font-weight: 500; line-height: 1.5;
+    }
+    .bz-modal__desc {
+      color: var(--text-secondary);
+      font-size: var(--f13, 0.8125rem); font-weight: 400; line-height: 1.5;
+      margin-bottom: 12px;
+    }
+    .bz-modal__section {
+      color: var(--text-primary);
+      font-size: var(--f16, 1rem); font-weight: 500; line-height: 1.5;
+      margin-bottom: 4px;
+    }
+    .bz-option-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 8px 0; border-top: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.25));
+    }
+    .bz-option-row__text { flex: 1 1 auto; min-width: 0; }
+    .bz-option-row__label {
+      color: var(--text-primary);
+      font-size: var(--f14, 0.875rem); font-weight: 400; line-height: 1.5;
+    }
+    .bz-option-row__hint {
+      color: var(--text-secondary);
+      font-size: var(--f13, 0.8125rem); font-weight: 400; line-height: 1.5;
+    }
     `;
     document.head.appendChild(style);
   }
@@ -477,6 +618,10 @@
 
   function renderPage(page, view) {
     page.innerHTML = '';
+    if (view === 'plugins') {
+      renderPluginsPage(page);
+      return;
+    }
     const copy = PAGE_COPY[view];
     const section = el('div', 'setting-section');
     section.appendChild(el('div', 'setting-section-label', copy.label));
@@ -484,6 +629,157 @@
     content.appendChild(el('div', 'setting-section-content__item bz-placeholder', copy.body));
     section.appendChild(content);
     page.appendChild(section);
+  }
+
+  // Native switch: .z-toggle track + fa-toggle-* knob glyph, state via .z-toggle--active.
+  function makeToggle(checked, onFlip) {
+    const t = document.createElement('div');
+    t.className = 'z-toggle --m' + (checked ? ' z-toggle--active' : '');
+    t.setAttribute('role', 'switch');
+    t.setAttribute('tabindex', '0');
+    t.setAttribute('aria-checked', checked ? 'true' : 'false');
+    t.style.cursor = 'pointer';
+    const track = document.createElement('div');
+    t.appendChild(track);
+    const knob = document.createElement('i');
+    knob.className = 'fa ' + (checked ? 'fa-toggle-checked-24' : 'fa-toggle-unchecked-24');
+    t.appendChild(knob);
+    const flip = (e) => {
+      if (e) e.stopPropagation();
+      onFlip(!t.classList.contains('z-toggle--active'));
+    };
+    t.addEventListener('click', flip);
+    t.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        flip(e);
+      }
+    });
+    return t;
+  }
+
+  function fullOptions(rec) {
+    const out = {};
+    for (const opt of rec.optionsSchema) out[opt.key] = rec.options[opt.key] !== false;
+    return out;
+  }
+
+  function renderPluginsPage(page) {
+    page.innerHTML = '';
+    const section = el('div', 'setting-section');
+    section.appendChild(el('div', 'setting-section-label', 'Plugins'));
+
+    if (pendingRestart.size > 0) {
+      const banner = el('div', 'bz-restart-banner');
+      const text = el('div', 'bz-restart-banner__text');
+      text.appendChild(el('div', 'bz-restart-banner__title', 'Restart required!'));
+      text.appendChild(el('div', 'bz-restart-banner__sub', 'Restart now to apply new plugins and their settings'));
+      banner.appendChild(text);
+      const btn = el('button', 'bz-restart-btn', 'Restart');
+      btn.setAttribute('type', 'button');
+      btn.addEventListener('click', () => restart());
+      banner.appendChild(btn);
+      section.appendChild(banner);
+    }
+
+    const plugins = [...registry.values()];
+    if (plugins.length === 0) {
+      const content = el('div', 'setting-section-content');
+      content.appendChild(el('div', 'setting-section-content__item bz-placeholder', PAGE_COPY.plugins.body));
+      section.appendChild(content);
+    }
+    const grid = el('div', 'bz-plugin-grid');
+    for (const rec of plugins) {
+      const card = el('div', 'bz-plugin-card');
+      const header = el('div', 'bz-plugin-card__header');
+      header.appendChild(el('div', 'bz-plugin-card__name', rec.name));
+      const controls = el('div', 'bz-plugin-card__controls');
+      const gear = document.createElement('button');
+      gear.className = 'bz-icon-btn';
+      gear.setAttribute('type', 'button');
+      gear.setAttribute('aria-label', rec.name + ' settings');
+      const gearIcon = document.createElement('i');
+      gearIcon.className = 'fa fa-gear';
+      gear.appendChild(gearIcon);
+      gear.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openPluginSettings(rec, page);
+      });
+      controls.appendChild(gear);
+      controls.appendChild(makeToggle(rec.enabled, (next) => {
+        setEnabled(rec.id, next);
+        renderPluginsPage(page);
+      }));
+      header.appendChild(controls);
+      card.appendChild(header);
+      card.appendChild(el('div', 'bz-plugin-card__desc', rec.description));
+      grid.appendChild(card);
+    }
+    section.appendChild(grid);
+    page.appendChild(section);
+  }
+
+  function openPluginSettings(rec, page) {
+    closePluginSettings();
+    const backdrop = el('div', 'bz-modal-backdrop');
+    const modal = el('div', 'bz-modal');
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-label', rec.name + ' settings');
+    backdrop.appendChild(modal);
+
+    const header = el('div', 'bz-modal__header');
+    header.appendChild(el('div', 'bz-modal__title', rec.name));
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'bz-icon-btn';
+    closeBtn.setAttribute('type', 'button');
+    closeBtn.setAttribute('aria-label', 'Close settings');
+    const closeIcon = document.createElement('i');
+    closeIcon.className = 'fa fa-Close_24_Line';
+    closeBtn.appendChild(closeIcon);
+    closeBtn.addEventListener('click', () => closePluginSettings());
+    header.appendChild(closeBtn);
+    modal.appendChild(header);
+    modal.appendChild(el('div', 'bz-modal__desc', rec.description));
+
+    const renderOptions = () => {
+      modal.querySelectorAll('.bz-option-row, .bz-modal__section').forEach((n) => n.remove());
+      const current = fullOptions(rec);
+      if (rec.optionsSchema.length === 0) {
+        modal.appendChild(el('div', 'bz-modal__desc', 'No settings available.'));
+        return;
+      }
+      modal.appendChild(el('div', 'bz-modal__section', 'Settings'));
+      for (const opt of rec.optionsSchema) {
+        const row = el('div', 'bz-option-row');
+        const text = el('div', 'bz-option-row__text');
+        text.appendChild(el('div', 'bz-option-row__label', opt.label));
+        if (opt.description) text.appendChild(el('div', 'bz-option-row__hint', opt.description));
+        row.appendChild(text);
+        row.appendChild(makeToggle(!!current[opt.key], (next) => {
+          setPluginOptions(rec.id, { ...fullOptions(rec), [opt.key]: next });
+          renderOptions();
+          if (page && page.isConnected) renderPluginsPage(page);
+        }));
+        modal.appendChild(row);
+      }
+    };
+    renderOptions();
+
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) closePluginSettings();
+    });
+    backdrop.__bzEsc = (e) => {
+      if (e.key === 'Escape') closePluginSettings();
+    };
+    document.addEventListener('keydown', backdrop.__bzEsc);
+    document.body.appendChild(backdrop);
+  }
+
+  function closePluginSettings() {
+    document.querySelectorAll('.bz-modal-backdrop').forEach((b) => {
+      if (b.__bzEsc) document.removeEventListener('keydown', b.__bzEsc);
+      b.remove();
+    });
   }
 
   function boot() {
@@ -504,6 +800,8 @@
       disablePlugin: (id) => setEnabled(id, false),
       setPluginOptions,
       listPlugins: () => [...registry.values()],
+      restart,
+      isRestartPending,
       storage,
       ui: { openPage, refresh: () => openPage(currentView) },
       __booted: true,
@@ -520,6 +818,7 @@
       observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
     }
     log('core v' + VERSION + ' initialized');
+    window.dispatchEvent(new Event('betterzalo:ready'));
     return api;
   }
 
