@@ -271,6 +271,21 @@ Plugin functionality should only be implemented when the task explicitly asks fo
 
 ---
 
+## Build & Distribution
+
+- `package.json` is the single source of truth for the release version
+  (`npm version patch|minor|major` to bump); `npm run build` validates sources,
+  stamps the version into the packaged core, and writes
+  `dist/BetterZalo-v<version>.zip` (`manifest.json` + `files/` + `checksums.txt`).
+- Only allowlisted files in `scripts/build.mjs` (`PAYLOAD`) enter a package:
+  never globs, never secrets, never `.git`/logs/temp. The build fails loudly on
+  missing files, syntax errors, or checksum mismatches.
+- `SUPPORTED_ZALO_VERSIONS` in `scripts/build.mjs` lists only Zalo builds
+  actually verified; the GitHub release workflow attaches the ZIP on release.
+- Build tooling (`archiver`, dev-only) never ships in the package.
+
+---
+
 ## Current vs Planned Functionality
 
 Do not implement planned functionality simply because it is mentioned in documentation.

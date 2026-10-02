@@ -1,0 +1,15 @@
+{
+  "name": "betterzalo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PC-only modding framework for Zalo",
+  "license": "MIT",
+  "type": "commonjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "package": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "archiver": "^7.0.1"
+  }
+}
