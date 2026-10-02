@@ -192,10 +192,14 @@
     style.id = STYLE_ID;
     style.textContent = `
     .bz-section-header {
-      padding: 12px 16px 4px; font-size: 12px; font-weight: 600;
-      letter-spacing: .04em;
-      color: var(--text-secondary, var(--text-primary, GrayText));
+      padding: 12px 16px 4px; font-size: var(--f18, 1.125rem); font-weight: 500;
+      line-height: 1.5;
+      color: var(--text-primary, black);
       user-select: none;
+    }
+    body.dark .bz-section-header,
+    html.dark .bz-section-header {
+      color: var(--text-on-color, white);
     }
     .bz-nav-item {
       box-sizing: border-box !important;
