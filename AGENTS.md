@@ -280,6 +280,9 @@ Plugin functionality should only be implemented when the task explicitly asks fo
 - Only allowlisted files in `scripts/build.mjs` (`PAYLOAD`) enter a package:
   never globs, never secrets, never `.git`/logs/temp. The build fails loudly on
   missing files, syntax errors, or checksum mismatches.
+- The build also writes `dist/<zip>.sha256` (artifact checksum sidecar,
+  published as a second release asset) and stamps a derived `build` revision
+  (git short-SHA, else `"local"`) into the manifest. No second version source.
 - `SUPPORTED_ZALO_VERSIONS` in `scripts/build.mjs` lists only Zalo builds
   actually verified; the GitHub release workflow attaches the ZIP on release.
 - Build tooling (`archiver`, dev-only) never ships in the package.

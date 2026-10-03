@@ -26,6 +26,18 @@ const SUPPORTED_ZALO_VERSIONS = ['26.9.10'];
 const fail = (msg) => { console.error('[build] FATAL: ' + msg); process.exit(1); };
 const sha256File = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
+// Short git revision for build provenance (dev/local builds stay
+// distinguishable from release builds without a second version source).
+// Never fails the build: falls back to "local" outside a git checkout.
+function buildRevision() {
+  try {
+    const out = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], { stdio: 'pipe' });
+    const sha = String(out).trim();
+    if (/^[0-9a-f]{7,40}$/.test(sha)) return sha;
+  } catch { /* not a git checkout; fall through */ }
+  return 'local';
+}
+
 async function main() {
   const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const version = pkg.version;
@@ -66,6 +78,7 @@ async function main() {
     manifestVersion: 1,
     name: 'BetterZalo',
     version,
+    build: buildRevision(),
     supportedZaloVersions: SUPPORTED_ZALO_VERSIONS,
     files: staged.map((rel) => {
       const abs = path.join(STAGE, rel);
@@ -109,7 +122,20 @@ async function main() {
   });
   const bytes = statSync(zipPath).size;
   if (bytes === 0 || entryCount === 0) fail('produced an empty package');
+
+  // 7. Artifact checksum sidecar for download verification (BSD-style, same
+  // shape as checksums.txt so one parser handles both). Published next to
+  // the ZIP as a second release asset; the in-zip checksums.txt separately
+  // covers extracted contents for post-install verification.
+  const zipHash = sha256File(zipPath);
+  const sidecarPath = `${zipPath}.sha256`;
+  rmSync(sidecarPath, { force: true });
+  writeFileSync(sidecarPath, `${zipHash}  ${zipName}\n`);
+  if (readFileSync(sidecarPath, 'utf8') !== `${zipHash}  ${zipName}\n`) {
+    fail('could not verify checksum sidecar');
+  }
   console.log(`[build] wrote dist/${zipName} (${entryCount} entries, ${bytes} bytes)`);
+  console.log(`[build] wrote dist/${zipName}.sha256`);
   console.log('[build] package OK');
 }
 
