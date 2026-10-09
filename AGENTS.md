@@ -274,18 +274,22 @@ Plugin functionality should only be implemented when the task explicitly asks fo
 ## Build & Distribution
 
 - `package.json` is the single source of truth for the release version
-  (`npm version patch|minor|major` to bump); `npm run build` validates sources,
+  (`npm version patch|minor|major` to bump); `npm run build` typechecks,
+  validates sources, compiles plugin `.tsx` to runnable JS via esbuild,
   stamps the version into the packaged core, and writes
   `dist/BetterZalo-v<version>.zip` (`manifest.json` + `files/` + `checksums.txt`).
 - Only allowlisted files in `scripts/build.mjs` (`PAYLOAD`) enter a package:
-  never globs, never secrets, never `.git`/logs/temp. The build fails loudly on
-  missing files, syntax errors, or checksum mismatches.
+  never globs, never secrets, never `.git`/logs/temp, never raw `.tsx`
+  sources. The build fails loudly on
+  missing files, type errors, syntax errors, or checksum mismatches.
+- `npm run typecheck` (`tsc --noEmit`) covers `src/plugins/**/*.tsx`.
+  `betterzalo-core.js` stays plain JS.
 - The build also writes `dist/<zip>.sha256` (artifact checksum sidecar,
   published as a second release asset) and stamps a derived `build` revision
   (git short-SHA, else `"local"`) into the manifest. No second version source.
 - `SUPPORTED_ZALO_VERSIONS` in `scripts/build.mjs` lists only Zalo builds
   actually verified; the GitHub release workflow attaches the ZIP on release.
-- Build tooling (`archiver`, dev-only) never ships in the package.
+- Build tooling (`archiver`, `typescript`, `esbuild` — dev-only) never ships in the package.
 
 ---
 

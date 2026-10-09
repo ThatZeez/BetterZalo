@@ -7,9 +7,12 @@
   "type": "commonjs",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "package": "node scripts/build.mjs"
+    "package": "node scripts/build.mjs",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
-    "archiver": "^7.0.1"
+    "archiver": "^7.0.1",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.9.3"
   }
 }

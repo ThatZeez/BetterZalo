@@ -7,16 +7,19 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import archiver from 'archiver';
+import { transform } from 'esbuild';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DIST = path.join(ROOT, 'dist');
 const STAGE = path.join(DIST, 'stage');
+const TSC_BIN = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
 
 // Allowlisted payload: exact source files the patcher must install, mapped to
 // their in-package paths. Nothing else from the repo enters the package.
+// TSX sources are compiled to runnable JS; only the compiled output ships.
 const PAYLOAD = [
   { src: 'src/betterzalo-core.js', dest: 'files/betterzalo-core.js', stampVersion: true },
-  { src: 'src/plugins/dont-track-me/dont-track-me.js', dest: 'files/plugins/dont-track-me/dont-track-me.js', stampVersion: false },
+  { src: 'src/plugins/dont-track-me/dont-track-me.tsx', dest: 'files/plugins/dont-track-me/dont-track-me.js', stampVersion: false, compile: 'tsx' },
 ];
 
 // Zalo builds BetterZalo has actually been reverse-engineered and verified
@@ -44,8 +47,17 @@ async function main() {
   if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version)) fail('invalid package.json version: ' + version);
   console.log(`[build] BetterZalo v${version}`);
 
-  // 1. Validate sources (fail fast on syntax errors).
-  for (const { src } of PAYLOAD) {
+  // 1. Validate sources (fail fast on syntax/type errors).
+  // TSX goes through tsc (typecheck); plain JS through node --check.
+  if (PAYLOAD.some((p) => p.src.endsWith('.tsx'))) {
+    try {
+      execFileSync(process.execPath, [TSC_BIN, '--noEmit', '-p', 'tsconfig.json'], { cwd: ROOT, stdio: 'pipe' });
+    } catch (e) {
+      fail('typecheck failed:\n' + (e.stdout ? String(e.stdout) : e.message));
+    }
+    console.log('[build] typecheck OK');
+  }
+  for (const { src } of PAYLOAD.filter((p) => !p.src.endsWith('.tsx'))) {
     const abs = path.join(ROOT, src);
     if (!statSync(abs, { throwIfNoEntry: false })) fail('missing required source file: ' + src);
     try {
@@ -59,10 +71,27 @@ async function main() {
   rmSync(STAGE, { recursive: true, force: true });
   mkdirSync(STAGE, { recursive: true });
   const staged = [];
-  for (const { src, dest, stampVersion } of PAYLOAD) {
+  for (const { src, dest, stampVersion, compile } of PAYLOAD) {
+    const srcAbs = path.join(ROOT, src);
+    if (!statSync(srcAbs, { throwIfNoEntry: false })) fail('missing required source file: ' + src);
     const destAbs = path.join(STAGE, dest);
     mkdirSync(path.dirname(destAbs), { recursive: true });
-    if (stampVersion) {
+    if (compile === 'tsx') {
+      // Compile to runnable JS; Zalo cannot execute .tsx. The compiled
+      // output is syntax-checked below so only valid JS reaches the package.
+      let js;
+      try {
+        js = (await transform(readFileSync(srcAbs, 'utf8'), { loader: 'tsx', target: 'es2020' })).code;
+      } catch (e) {
+        fail('tsx compile failed for ' + src + ': ' + e.message);
+      }
+      writeFileSync(destAbs, js);
+      try {
+        execFileSync(process.execPath, ['--check', destAbs], { stdio: 'pipe' });
+      } catch {
+        fail('compiled output failed syntax check: ' + src);
+      }
+    } else if (stampVersion) {
       let text = readFileSync(path.join(ROOT, src), 'utf8');
       if (!/const VERSION = '[^']*'/.test(text)) fail('VERSION stamp pattern not found in ' + src);
       text = text.replace(/const VERSION = '[^']*'/, `const VERSION = '${version}'`);
