@@ -274,7 +274,7 @@ Plugin functionality should only be implemented when the task explicitly asks fo
 ## Build & Distribution
 
 - `package.json` is the single source of truth for the release version
-  (`npm version patch|minor|major` to bump); `npm run build` typechecks,
+  (bump by editing the `version` field); `bun run build` typechecks,
   validates sources, compiles plugin `.tsx` to runnable JS via esbuild,
   stamps the version into the packaged core, and writes
   `dist/BetterZalo-v<version>.zip` (`manifest.json` + `files/` + `checksums.txt`).
@@ -282,8 +282,11 @@ Plugin functionality should only be implemented when the task explicitly asks fo
   never globs, never secrets, never `.git`/logs/temp, never raw `.tsx`
   sources. The build fails loudly on
   missing files, type errors, syntax errors, or checksum mismatches.
-- `npm run typecheck` (`tsc --noEmit`) covers `src/plugins/**/*.tsx`.
+- `bun run typecheck` (`tsc --noEmit`) covers `src/plugins/**/*.tsx`.
   `betterzalo-core.js` stays plain JS.
+- Toolchain is bun (`bun.lock`, `oven-sh/setup-bun` in CI); `scripts/build.mjs`
+  runs under node or bun (syntax checks use esbuild's parser, tsc resolves per
+  runtime).
 - The build also writes `dist/<zip>.sha256` (artifact checksum sidecar,
   published as a second release asset) and stamps a derived `build` revision
   (git short-SHA, else `"local"`) into the manifest. No second version source.

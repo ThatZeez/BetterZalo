@@ -7,12 +7,11 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import archiver from 'archiver';
-import { transform } from 'esbuild';
+import { transform, transformSync } from 'esbuild';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DIST = path.join(ROOT, 'dist');
 const STAGE = path.join(DIST, 'stage');
-const TSC_BIN = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
 
 // Allowlisted payload: exact source files the patcher must install, mapped to
 // their in-package paths. Nothing else from the repo enters the package.
@@ -28,6 +27,32 @@ const SUPPORTED_ZALO_VERSIONS = ['26.9.10'];
 
 const fail = (msg) => { console.error('[build] FATAL: ' + msg); process.exit(1); };
 const sha256File = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
+const isBun = !!process.versions.bun;
+
+// Syntax-check a JS file without executing it. Uses esbuild's parser so the
+// check works identically under node (`node scripts/build.mjs`) or bun
+// (`bun scripts/build.mjs`), where `node --check` is unavailable.
+function checkJsSyntax(abs, label) {
+  try {
+    transformSync(readFileSync(abs, 'utf8'), { loader: 'js' });
+  } catch {
+    fail('syntax check failed: ' + label);
+  }
+}
+
+// Runs tsc --noEmit through whichever runtime is executing this script.
+function runTypecheck() {
+  try {
+    if (isBun) {
+      execFileSync(process.execPath, ['x', 'tsc', '--noEmit', '-p', 'tsconfig.json'], { cwd: ROOT, stdio: 'pipe' });
+    } else {
+      const tscBin = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
+      execFileSync(process.execPath, [tscBin, '--noEmit', '-p', 'tsconfig.json'], { cwd: ROOT, stdio: 'pipe' });
+    }
+  } catch (e) {
+    fail('typecheck failed:\n' + (e.stdout ? String(e.stdout) : e.message));
+  }
+}
 
 // Short git revision for build provenance (dev/local builds stay
 // distinguishable from release builds without a second version source).
@@ -48,23 +73,15 @@ async function main() {
   console.log(`[build] BetterZalo v${version}`);
 
   // 1. Validate sources (fail fast on syntax/type errors).
-  // TSX goes through tsc (typecheck); plain JS through node --check.
+  // TSX goes through tsc (typecheck); plain JS through the esbuild parser.
   if (PAYLOAD.some((p) => p.src.endsWith('.tsx'))) {
-    try {
-      execFileSync(process.execPath, [TSC_BIN, '--noEmit', '-p', 'tsconfig.json'], { cwd: ROOT, stdio: 'pipe' });
-    } catch (e) {
-      fail('typecheck failed:\n' + (e.stdout ? String(e.stdout) : e.message));
-    }
+    runTypecheck();
     console.log('[build] typecheck OK');
   }
   for (const { src } of PAYLOAD.filter((p) => !p.src.endsWith('.tsx'))) {
     const abs = path.join(ROOT, src);
     if (!statSync(abs, { throwIfNoEntry: false })) fail('missing required source file: ' + src);
-    try {
-      execFileSync(process.execPath, ['--check', abs], { stdio: 'pipe' });
-    } catch {
-      fail('syntax check failed: ' + src);
-    }
+    checkJsSyntax(abs, src);
   }
 
   // 2. Stage payload (clean first so stale files can never leak into a package).
@@ -86,11 +103,7 @@ async function main() {
         fail('tsx compile failed for ' + src + ': ' + e.message);
       }
       writeFileSync(destAbs, js);
-      try {
-        execFileSync(process.execPath, ['--check', destAbs], { stdio: 'pipe' });
-      } catch {
-        fail('compiled output failed syntax check: ' + src);
-      }
+      checkJsSyntax(destAbs, src + ' (compiled output)');
     } else if (stampVersion) {
       let text = readFileSync(path.join(ROOT, src), 'utf8');
       if (!/const VERSION = '[^']*'/.test(text)) fail('VERSION stamp pattern not found in ' + src);
