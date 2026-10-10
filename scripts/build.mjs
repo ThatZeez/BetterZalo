@@ -23,7 +23,9 @@ const PAYLOAD = [
 
 // Zalo builds BetterZalo has actually been reverse-engineered and verified
 // against. Do not extend this list without verifying the new Zalo version.
-const SUPPORTED_ZALO_VERSIONS = ['26.9.10'];
+// (26.10.10.3064 verified: Settings DOM hooks, theme tokens, icon glyphs,
+// and all blocked telemetry endpoints confirmed present in its bundles.)
+const SUPPORTED_ZALO_VERSIONS = ['26.9.10', '26.10.10.3064'];
 
 const fail = (msg) => { console.error('[build] FATAL: ' + msg); process.exit(1); };
 const sha256File = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
