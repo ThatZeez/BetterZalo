@@ -12,6 +12,22 @@
   const warn = (...a) => console.warn(TAG, ...a);
   const err = (...a) => console.error(TAG, ...a);
 
+  // Own script URL, captured synchronously at evaluation: inside any callback
+  // document.currentScript is null. The patcher hooks this file into
+  // index.html via <script src>, so sibling plugin files resolve relative to
+  // it. Null when hand-pasted (devtools) — the plugin loader then skips.
+  const CORE_URL = (() => {
+    try {
+      const cur = document.currentScript;
+      if (cur && cur.src) return cur.src;
+      const tags = document.querySelectorAll('script[src]');
+      for (const t of tags) {
+        if (t.src && t.src.endsWith('betterzalo-core.js')) return t.src;
+      }
+    } catch (_) { /* non-DOM context: loader stays off */ }
+    return null;
+  })();
+
   const memFallback = { data: null };
 
   function defaultStore() {
@@ -782,6 +798,58 @@
     });
   }
 
+  // Plugin loader: reads the build-generated plugins-manifest.js sitting next
+  // to this file and injects one classic <script> per listed plugin.
+  // async=false preserves manifest order (dynamic scripts default async).
+  // Entries must be relative same-archive paths — never remote URLs.
+  // Registration order doesn't matter: plugins wait for betterzalo:ready.
+  function loadScript(src) {
+    return new Promise((resolve) => {
+      const tag = document.createElement('script');
+      tag.async = false;
+      tag.src = src;
+      tag.onload = () => resolve(true);
+      tag.onerror = () => {
+        warn('plugin script failed to load:', src);
+        resolve(false);
+      };
+      (document.head || document.documentElement).appendChild(tag);
+    });
+  }
+
+  function pluginSrcs() {
+    const list = window.__betterzaloPluginFiles;
+    if (!Array.isArray(list)) return [];
+    return list.filter(
+      (p) => typeof p === 'string' && p.length > 0 && !p.includes('..') && !/[\\:]/.test(p)
+    );
+  }
+
+  async function loadPlugins() {
+    if (!CORE_URL) {
+      warn('core script URL unknown (not loaded via <script src>); plugin autoload skipped');
+      return;
+    }
+    let manifestUrl;
+    try {
+      manifestUrl = new URL('plugins-manifest.js', CORE_URL).href;
+    } catch (_) {
+      warn('could not resolve plugins-manifest.js; plugin autoload skipped');
+      return;
+    }
+    if (!(await loadScript(manifestUrl))) return;
+    const files = pluginSrcs();
+    if (files.length === 0) {
+      warn('no plugins listed in plugins-manifest.js');
+      return;
+    }
+    const base = manifestUrl.slice(0, manifestUrl.lastIndexOf('/') + 1);
+    for (const rel of files) {
+      await loadScript(base + rel);
+    }
+    log(`plugin autoload done: ${files.length} file(s) requested`);
+  }
+
   function boot() {
     if (window.BetterZalo && window.BetterZalo.__booted) {
       warn('already initialized');
@@ -790,8 +858,7 @@
     ensureStyle();
     applyCustomCSS();
 
-    const api = {
-      version: VERSION,
+    const api = {      version: VERSION,
       configKey: CONFIG_KEY,
       registerPlugin,
       unregisterPlugin,
@@ -807,6 +874,8 @@
       __booted: true,
     };
     window.BetterZalo = api;
+
+    loadPlugins().catch((e) => warn('plugin autoload failed:', e && e.message ? e.message : e));
 
     const tryInject = () => {
       const menu = findSettingMenu();
