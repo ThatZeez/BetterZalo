@@ -254,6 +254,11 @@ gear button opening a modal over a dark backdrop). `BetterZalo.restart()`
 (`location.reload()`) applies staged `requiresRestart` changes; the Plugins
 page shows a single restart banner while any are pending. Toggles reuse Zalo's
 native `.z-toggle` + `fa-toggle-*` mechanism; gear/close use native `fa` glyphs.
+At boot the core autoloads plugins: it captures its own `<script src>` URL
+synchronously, loads the build-generated `plugins-manifest.js` sitting next to
+it, then injects one classic `<script>` per listed entry (`async=false`, order
+preserved). No patcher involvement; if the core wasn't loaded via script tag
+(devtools paste), autoload skips with a warning and the placeholder stays.
 
 Configuration persistence uses:
 
